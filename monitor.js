@@ -152,7 +152,8 @@ function parseServerInfoHeader(buffer) {
         magic: magic,
         version: buffer.readUInt32LE(4),
         network_id: buffer.readUInt32LE(8),
-        padding1: buffer.readUInt32LE(12),
+        warning_flags: buffer.readUInt16LE(12),  // Now 16-bit
+        padding1: buffer.readUInt16LE(14),       // Read padding for completeness
         timestamp: readUInt64LE(buffer, 16),
         uptime: readUInt64LE(buffer, 24),
         io_latency_us: readUInt64LE(buffer, 32),
@@ -160,7 +161,7 @@ function parseServerInfoHeader(buffer) {
         peer_count: buffer.readUInt32LE(48),
         node_size: buffer.readUInt32LE(52),
         server_state: buffer.readUInt32LE(56),
-        amendment_blocked: buffer.readUInt32LE(60),
+        padding2: buffer.readUInt32LE(60),       // Read padding
         fetch_pack_size: readUInt64LE(buffer, 64),
         proposer_count: readUInt64LE(buffer, 72),
         converge_time_ms: readUInt64LE(buffer, 80),
@@ -170,29 +171,29 @@ function parseServerInfoHeader(buffer) {
         reserve_inc: readUInt64LE(buffer, 112),
         ledger_seq: readUInt64LE(buffer, 120),
         ledger_hash: buffer.slice(128, 160).toString('hex'),
-        node_public_key: buffer.slice(160, 192).toString('hex'),
-        warning_flags: buffer.readUInt32LE(192),
-        complete_ledger_count: buffer.readUInt32LE(196),
+        node_public_key: buffer.slice(160, 193).toString('hex'),  // Now 33 bytes
+        // Skip 7 bytes padding
+        ledger_range_count: buffer.readUInt32LE(200),
         
-        // System metrics
-        process_memory_pages: readUInt64LE(buffer, 200),
-        system_memory_total: readUInt64LE(buffer, 208),
-        system_memory_free: readUInt64LE(buffer, 216),
-        system_memory_used: readUInt64LE(buffer, 224),
-        system_disk_total: readUInt64LE(buffer, 232),
-        system_disk_free: readUInt64LE(buffer, 240),
-        system_disk_used: readUInt64LE(buffer, 248),
-        load_avg_1min: readDoubleLE(buffer, 256),
-        load_avg_5min: readDoubleLE(buffer, 264),
-        load_avg_15min: readDoubleLE(buffer, 272),
-        io_wait_time: readUInt64LE(buffer, 280),
+        // System metrics start at offset 208 (aligned)
+        process_memory_pages: readUInt64LE(buffer, 208),
+        system_memory_total: readUInt64LE(buffer, 216),
+        system_memory_free: readUInt64LE(buffer, 224),
+        system_memory_used: readUInt64LE(buffer, 232),
+        system_disk_total: readUInt64LE(buffer, 240),
+        system_disk_free: readUInt64LE(buffer, 248),
+        system_disk_used: readUInt64LE(buffer, 256),
+        load_avg_1min: readDoubleLE(buffer, 264),
+        load_avg_5min: readDoubleLE(buffer, 272),
+        load_avg_15min: readDoubleLE(buffer, 280),
+        io_wait_time: readUInt64LE(buffer, 288),
 
-        // Network and disk rates
+        // Network and disk rates (offset maintained for alignment)
         rates: {
-            network_in: parseRateStats(buffer, 288),
-            network_out: parseRateStats(buffer, 320),
-            disk_read: parseRateStats(buffer, 352),
-            disk_write: parseRateStats(buffer, 384)
+            network_in: parseRateStats(buffer, 296),
+            network_out: parseRateStats(buffer, 328),
+            disk_read: parseRateStats(buffer, 360),
+            disk_write: parseRateStats(buffer, 392)
         }
     };
 
@@ -202,7 +203,7 @@ function parseServerInfoHeader(buffer) {
 function parseLedgerRanges(buffer, header) {
     const ranges = [];
     const rangeSize = 8; // 2 uint32_t values
-    const rangeStart = 416; // Size of header
+    const rangeStart = 424; // New offset after adjusted header size
 
     for (let i = 0; i < header.complete_ledger_count; i++) {
         const offset = rangeStart + (i * rangeSize);
@@ -218,7 +219,7 @@ function parseLedgerRanges(buffer, header) {
 
     return ranges;
 }
-    
+ 
 function formatAddress(address, port, maxLength = 15) {
     // If address is IPv6, it will contain colons
     const isIPv6 = address.includes(':');
@@ -340,7 +341,7 @@ class ServerCard {
         const { ip, port } = formatAddress(this.rinfo.address, this.rinfo.port);
 
         const content = [
-            `Node: ${nodeId}`,
+            `Node: ${nodeId.slice(0, 6)}...${nodeId.slice(-6)}`,
             `IP: ${ip}`,
             `NetID: ${this.header.network_id}`,
             `Status: ${syncStatus}`,
