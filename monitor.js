@@ -43,7 +43,7 @@ function parseRateStats(buffer, offset) {
 // Create the UI
 const screen = blessed.screen({
     smartCSR: true,
-    title: 'XRPL Protocol Monitor Dashboard'
+    title: 'XDGM - Xahau/XRPL DataGram Monitor Dashboard'
 });
 
 // Create a container for the grid
@@ -66,7 +66,7 @@ const header = blessed.box({
     left: 0,
     width: '100%',
     height: 1,
-    content: 'XRPL Protocol Monitor Dashboard - Press Q to quit',
+    content: 'XDGM - Xahau/XRPL DataGram Monitor Dashboard - Press Q to quit',
     style: {
         fg: 'white',
         bg: 'blue',
@@ -216,6 +216,35 @@ function parseLedgerRanges(buffer, header) {
 
     return ranges;
 }
+    
+function formatAddress(address, port, maxLength = 15) {
+    // If address is IPv6, it will contain colons
+    const isIPv6 = address.includes(':');
+    
+    // For IPv6, remove brackets if present
+    let ip = address.replace(/^\[|\]$/g, '');
+    
+    // If the IP is too long, truncate it with ellipsis
+    if (ip.length > maxLength) {
+        if (isIPv6) {
+            // For IPv6, try to keep the start and end parts
+            const parts = ip.split(':');
+            if (parts.length > 4) {
+                ip = parts.slice(0, 2).join(':') + '...' + parts.slice(-2).join(':');
+            }
+            // If still too long, do a simple truncation
+            if (ip.length > maxLength) {
+                ip = ip.substring(0, maxLength - 3) + '...';
+            }
+        } else {
+            // For IPv4, simple truncation
+            ip = ip.substring(0, maxLength - 3) + '...';
+        }
+    }
+    
+    return { ip, port };
+}
+
 
 // Server card class to manage individual server displays
 class ServerCard {
@@ -291,10 +320,12 @@ class ServerCard {
         const isNotSynced = !!(this.header.warning_flags & WARNING_FLAGS.NOT_SYNCED);
 
         const syncStatus = isNotSynced ? '{red-fg}NOT SYNCED{/red-fg}' : '{green-fg}SYNCED{/green-fg}';
+    
+        const { ip, port } = formatAddress(this.rinfo.address, this.rinfo.port);
 
         const content = [
             `Node: ${nodeId}`,
-            `Addr: ${this.rinfo.address}:${this.rinfo.port}`,
+            `IP: ${ip}`,
             `NetID: ${this.header.network_id}`,
             `Status: ${syncStatus}`,
             `Peers: ${this.header.peer_count}`,
@@ -376,11 +407,11 @@ class ServerCard {
             tags: true
         });
 
-        // Add close button
-        const closeButton = blessed.box({
+        // Create close button with improved clickable configuration
+        const closeButton = blessed.button({  // Changed from blessed.box to blessed.button
             parent: this.detailsBox,
             top: 0,
-            right: 0,
+            right: 1,
             width: 3,
             height: 1,
             content: '[X]',
@@ -391,11 +422,32 @@ class ServerCard {
                 }
             },
             mouse: true,
-            clickable: true
+            clickable: true,
+            align: 'center'
         });
 
-        closeButton.on('click', () => this.closeDetails());
-        this.detailsBox.key(['escape', 'q'], () => this.closeDetails());
+        // Bind the close handler using press instead of click
+        closeButton.on('press', () => {
+            this.closeDetails();
+            screen.render();
+        });
+
+        // Add hover effect handler
+        closeButton.on('mouseover', () => {
+            closeButton.style.fg = 'yellow';
+            screen.render();
+        });
+
+        closeButton.on('mouseout', () => {
+            closeButton.style.fg = 'red';
+            screen.render();
+        });
+
+        // Add additional click handler on the button itself
+        this.detailsBox.key(['escape', 'q'], () => {
+            this.closeDetails();
+            screen.render();
+        });
 
         this.updateDetailsBox();
         screen.render();
