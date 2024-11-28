@@ -391,7 +391,7 @@ class ServerCard {
             border: {
                 type: 'line'
             },
-            label: ` Server Details - ${nodeId} `,
+            label: ` Server Details - ${nodeId} - Click anywhere to close `,
             style: {
                 border: {
                     fg: 'white'
@@ -414,31 +414,11 @@ class ServerCard {
             tags: true
         });
 
-        // Create close button with improved positioning and handling
-        const closeButton = blessed.text({
-            parent: this.detailsBox,
-            top: -1,
-            right: 0,
-            width: 4,
-            height: 1,
-            content: '[X]',
-            style: {
-                fg: 'red',
-                hover: {
-                    fg: 'yellow'
-                }
-            },
-            mouse: true
-        });
-
-        // Add click handler to the actual area where [X] is displayed
-        closeButton.on('click', () => {
+        // Click anywhere in the box to close
+        this.detailsBox.on('click', () => {
             this.closeDetails();
             screen.render();
         });
-
-        // Make the entire details box draggable
-        this.detailsBox.draggable = true;
 
         // Add key handlers
         this.detailsBox.key(['escape', 'q'], () => {
@@ -449,6 +429,7 @@ class ServerCard {
         this.updateDetailsBox();
         screen.render();
     }
+
 
     updateDetailsBox() {
 
