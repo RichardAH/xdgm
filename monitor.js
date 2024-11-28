@@ -1,6 +1,7 @@
 const dgram = require('dgram');
 const blessed = require('blessed');
 const moment = require('moment');
+const { encodeNodePublic } = require('ripple-address-codec');
 
 // Constants from original code
 const SERVER_INFO_MAGIC = 0x4D474458;
@@ -282,7 +283,15 @@ class ServerCard {
 
     getNodeId() {
         if (!this.header) return 'Unknown';
-        return this.header.node_public_key.substring(0, 8);
+        try {
+            // Convert the hex string to buffer
+            const pubKeyBuffer = Buffer.from(this.header.node_public_key, 'hex');
+            // Encode to node public format (n...)
+            return encodeNodePublic(pubKeyBuffer);
+        } catch (err) {
+            console.error('Error encoding node public key:' + this.header.node_public_key + ' size: ' + this.header.node_public_key.length, err);
+            return this.header.node_public_key.substring(0, 8); // Fallback to hex prefix
+        }
     }
 
     getWarnings(header) {
