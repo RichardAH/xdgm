@@ -5,6 +5,7 @@ const moment = require('moment');
 // Constants from original code
 const SERVER_INFO_MAGIC = 0x4D474458;
 const SERVER_INFO_VERSION = 1;
+const SERVER_TIMEOUT = 2000;
 
 const WARNING_FLAGS = {
     AMENDMENT_BLOCKED: 1 << 0,
@@ -275,6 +276,8 @@ class ServerCard {
 
         this.detailsBox = null;
         this.box.on('click', () => this.toggleDetails());
+        this.lastUpdate = 0;
+        this.isAwol = false;
     }
 
     getNodeId() {
@@ -317,9 +320,13 @@ class ServerCard {
     updateDisplay() {
         const warnings = this.getWarnings(this.header);
         const nodeId = this.getNodeId();
+        this.isAwol = (Date.now() - this.lastUpdate) > SERVER_TIMEOUT;        
         const isNotSynced = !!(this.header.warning_flags & WARNING_FLAGS.NOT_SYNCED);
-
-        const syncStatus = isNotSynced ? '{red-fg}NOT SYNCED{/red-fg}' : '{green-fg}SYNCED{/green-fg}';
+        const syncStatus = this.isAwol ? 
+            '{red-fg}AWOL{/red-fg}' : 
+            (this.header.warning_flags & WARNING_FLAGS.NOT_SYNCED) ? 
+                '{red-fg}NOT SYNCED{/red-fg}' : 
+                '{green-fg}SYNCED{/green-fg}';
     
         const { ip, port } = formatAddress(this.rinfo.address, this.rinfo.port);
 
@@ -337,17 +344,17 @@ class ServerCard {
         this.box.setContent(content);
 
         // Update card color based on warnings and age
-        if (warnings.length > 0) {
+        if (this.isAwol) {
+            this.box.style.border.fg = 'grey';
+            if (!this.lastAwolAlert || Date.now() - this.lastAwolAlert > 300000) { // 5 minutes
+                addAlert('Server is AWOL', nodeId);
+                this.lastAwolAlert = Date.now();
+            }
+        } else if (warnings.length > 0) {
             this.box.style.border.fg = 'red';
             if (!this.lastWarningTime || Date.now() - this.lastWarningTime > 300000) { // 5 minutes
                 warnings.forEach(warning => addAlert(warning, nodeId));
                 this.lastWarningTime = Date.now();
-            }
-        } else if (Date.now() - this.lastUpdate > 5000) {
-            this.box.style.border.fg = 'yellow';
-            if (!this.lastStaleAlert || Date.now() - this.lastStaleAlert > 300000) { // 5 minutes
-                addAlert('Server connection stale', nodeId);
-                this.lastStaleAlert = Date.now();
             }
         } else {
             this.box.style.border.fg = 'green';
@@ -407,12 +414,12 @@ class ServerCard {
             tags: true
         });
 
-        // Create close button with improved clickable configuration
-        const closeButton = blessed.button({  // Changed from blessed.box to blessed.button
+        // Create close button with improved positioning and handling
+        const closeButton = blessed.text({
             parent: this.detailsBox,
-            top: 0,
-            right: 1,
-            width: 3,
+            top: -1,
+            right: 0,
+            width: 4,
             height: 1,
             content: '[X]',
             style: {
@@ -421,29 +428,19 @@ class ServerCard {
                     fg: 'yellow'
                 }
             },
-            mouse: true,
-            clickable: true,
-            align: 'center'
+            mouse: true
         });
 
-        // Bind the close handler using press instead of click
-        closeButton.on('press', () => {
+        // Add click handler to the actual area where [X] is displayed
+        closeButton.on('click', () => {
             this.closeDetails();
             screen.render();
         });
 
-        // Add hover effect handler
-        closeButton.on('mouseover', () => {
-            closeButton.style.fg = 'yellow';
-            screen.render();
-        });
+        // Make the entire details box draggable
+        this.detailsBox.draggable = true;
 
-        closeButton.on('mouseout', () => {
-            closeButton.style.fg = 'red';
-            screen.render();
-        });
-
-        // Add additional click handler on the button itself
+        // Add key handlers
         this.detailsBox.key(['escape', 'q'], () => {
             this.closeDetails();
             screen.render();
@@ -454,9 +451,23 @@ class ServerCard {
     }
 
     updateDetailsBox() {
+
         if (!this.detailsBox) return;
 
         const warnings = this.getWarnings(this.header);
+        const { ip, port } = formatAddress(this.rinfo.address, this.rinfo.port, 45);
+
+        if (this.isAwol) {
+            this.detailsBox.setContent(
+                'Server Status: {red-fg}AWOL{/red-fg}\n' +
+                `Last seen: ${moment(this.lastUpdate).format('YYYY-MM-DD HH:mm:ss')}\n` +
+                `IP Address: ${ip}\n` +
+                `Port: ${port}\n` +
+                `Node ID: ${this.getNodeId()}`
+            );
+            return;
+        }
+
         const isNotSynced = !!(this.header.warning_flags & WARNING_FLAGS.NOT_SYNCED);
         const syncStatus = isNotSynced ? '{red-fg}NOT SYNCED{/red-fg}' : '{green-fg}SYNCED{/green-fg}';
 
