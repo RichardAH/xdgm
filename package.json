@@ -1,0 +1,29 @@
+{
+  "name": "xrpl-datagram-monitor",
+  "version": "1.0.0",
+  "description": "A terminal-based dashboard for monitoring XRPL server datagrams",
+  "main": "monitor.js",
+  "scripts": {
+    "start": "node monitor.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "xrpl",
+    "ripple",
+    "datagram",
+    "monitoring",
+    "dashboard",
+    "terminal",
+    "blessed",
+    "udp"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "blessed": "^0.1.81",
+    "moment": "^2.30.1"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
