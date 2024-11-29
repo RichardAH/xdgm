@@ -200,12 +200,15 @@ function parseServerInfoHeader(buffer) {
     return header;
 }
 
+// Calculate size of ServerInfoHeader structure
+const HEADER_SIZE = 424; 
 function parseLedgerRanges(buffer, header) {
     const ranges = [];
-    const rangeSize = 8; // 2 uint32_t values
-    const rangeStart = 424; // New offset after adjusted header size
+    const rangeSize = 8; // Each range is 2 uint32_t values (start and end)
+    const rangeStart = HEADER_SIZE; // Start after the fixed header
 
-    for (let i = 0; i < header.complete_ledger_count; i++) {
+    // Use the correct field from header for range count
+    for (let i = 0; i < header.ledger_range_count; i++) {
         const offset = rangeStart + (i * rangeSize);
         if (offset + rangeSize > buffer.length) {
             throw new Error('Buffer too small for specified range count');
@@ -219,7 +222,7 @@ function parseLedgerRanges(buffer, header) {
 
     return ranges;
 }
- 
+
 function formatAddress(address, port, maxLength = 15) {
     // If address is IPv6, it will contain colons
     const isIPv6 = address.includes(':');
@@ -296,6 +299,9 @@ class ServerCard {
     }
 
     getWarnings(header) {
+        // Return empty array if header is undefined
+        if (!header) return [];
+        
         const warnings = [];
         if (header.warning_flags & WARNING_FLAGS.AMENDMENT_BLOCKED) warnings.push('Amendment Blocked');
         if (header.warning_flags & WARNING_FLAGS.UNL_BLOCKED) warnings.push('UNL Blocked');
