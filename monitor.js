@@ -27,10 +27,17 @@ function readDoubleLE(buffer, offset) {
 }
 
 function formatBytes(bytes) {
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const sizes = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
     if (bytes === 0) return '0 B';
     const i = Math.floor(Math.log(bytes) / Math.log(1024));
     return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${sizes[i]}`;
+}
+
+function formatRate(bytesPerSec) {
+    if (bytesPerSec === 0) return '0 B/s';
+    const sizes = ['B/s', 'KiB/s', 'MiB/s', 'GiB/s', 'TiB/s'];
+    const i = Math.floor(Math.log(bytesPerSec) / Math.log(1024));
+    return `${(bytesPerSec / Math.pow(1024, i)).toFixed(2)} ${sizes[i]}`;
 }
 
 function parseRateStats(buffer, offset) {
@@ -467,7 +474,6 @@ class ServerCard {
 
         const isNotSynced = !!(this.header.warning_flags & WARNING_FLAGS.NOT_SYNCED);
         const syncStatus = isNotSynced ? '{red-fg}NOT SYNCED{/red-fg}' : '{green-fg}SYNCED{/green-fg}';
-
         const content = [
             `Server: ${this.rinfo.address}:${this.rinfo.port}`,
             `Node ID: ${this.getNodeId()}`,
@@ -489,13 +495,13 @@ class ServerCard {
             `Disk Usage: ${formatBytes(Number(this.header.system_disk_used))} / ${formatBytes(Number(this.header.system_disk_total))}`,
             `Load Average: ${this.header.load_avg_1min.toFixed(2)}, ${this.header.load_avg_5min.toFixed(2)}, ${this.header.load_avg_15min.toFixed(2)}`,
             '',
-            'Network Rates (bytes/sec):',
-            `In  - 1m: ${this.header.rates.network_in.rate_1m.toFixed(2)}, 5m: ${this.header.rates.network_in.rate_5m.toFixed(2)}`,
-            `Out - 1m: ${this.header.rates.network_out.rate_1m.toFixed(2)}, 5m: ${this.header.rates.network_out.rate_5m.toFixed(2)}`,
+            'Network Rates:',
+            `In  - 1m: ${formatRate(this.header.rates.network_in.rate_1m)}, 5m: ${formatRate(this.header.rates.network_in.rate_5m)}`,
+            `Out - 1m: ${formatRate(this.header.rates.network_out.rate_1m)}, 5m: ${formatRate(this.header.rates.network_out.rate_5m)}`,
             '',
-            'Disk Rates (bytes/sec):',
-            `Read  - 1h: ${this.header.rates.disk_read.rate_1h.toFixed(2)}, 24h: ${this.header.rates.disk_read.rate_24h.toFixed(2)}`,
-            `Write - 1h: ${this.header.rates.disk_write.rate_1h.toFixed(2)}, 24h: ${this.header.rates.disk_write.rate_24h.toFixed(2)}`,
+            'Disk Rates:',
+            `Read  - 1h: ${formatRate(this.header.rates.disk_read.rate_1h)}, 24h: ${formatRate(this.header.rates.disk_read.rate_24h)}`,
+            `Write - 1h: ${formatRate(this.header.rates.disk_write.rate_1h)}, 24h: ${formatRate(this.header.rates.disk_write.rate_24h)}`,
             '',
             'Complete Ledger Ranges:',
             ...(this.ranges ? this.ranges.map(range => 
