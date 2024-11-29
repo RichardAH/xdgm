@@ -401,7 +401,7 @@ class ServerCard {
             border: {
                 type: 'line'
             },
-            label: ` Server Details - ${nodeId} - Click anywhere to close `,
+            label: ` Server Details - ${nodeId.slice(0, 6)}...${nodeId.slice(-6)} - Click anywhere to close `,
             style: {
                 border: {
                     fg: 'white'
