@@ -258,6 +258,39 @@ function formatAddress(address, port, maxLength = 15) {
     return { ip, port };
 }
 
+function bytesToMBps(bytesPerSec) {
+    return bytesPerSec / (1024 * 1024);  // Convert bytes/s to MB/s
+}
+
+function colorRateNetwork(bytesPerSec) {
+    const rate = bytesToMBps(bytesPerSec);
+    const formatted = formatRate(bytesPerSec);
+    
+    if (bytesPerSec === 0) {
+        return `{red-fg}${formatted}{/red-fg}`;  // No network activity might indicate issues
+    } else if (rate > 120) {
+        return `{red-fg}${formatted}{/red-fg}`;  // Over 1Gbps theoretical max
+    } else if (rate > 100) {
+        return `{yellow-fg}${formatted}{/yellow-fg}`;  // High utilization
+    } else {
+        return `{green-fg}${formatted}{/green-fg}`;  // Any non-zero traffic is normal
+    }
+}
+
+function colorRateDisk(bytesPerSec) {
+    const rate = bytesToMBps(bytesPerSec);
+    const formatted = formatRate(bytesPerSec);
+    
+    if (bytesPerSec === 0) {
+        return `{green-fg}${formatted}{/green-fg}`;  // Memory mode operation
+    } else if (rate > 1000) {
+        return `{red-fg}${formatted}{/red-fg}`;  // Extremely high for SSD
+    } else if (rate > 500) {
+        return `{yellow-fg}${formatted}{/yellow-fg}`;  // High utilization
+    } else {
+        return `{green-fg}${formatted}{/green-fg}`;  // Normal SSD range
+    }
+}
 
 // Server card class to manage individual server displays
 class ServerCard {
@@ -496,12 +529,12 @@ class ServerCard {
             `Load Average: ${this.header.load_avg_1min.toFixed(2)}, ${this.header.load_avg_5min.toFixed(2)}, ${this.header.load_avg_15min.toFixed(2)}`,
             '',
             'Network Rates:',
-            `In  - 1m: ${formatRate(this.header.rates.network_in.rate_1m)}, 5m: ${formatRate(this.header.rates.network_in.rate_5m)}`,
-            `Out - 1m: ${formatRate(this.header.rates.network_out.rate_1m)}, 5m: ${formatRate(this.header.rates.network_out.rate_5m)}`,
+            `In:    1m: ${colorRateNetwork(this.header.rates.network_in.rate_1m).padEnd(20)}  5m: ${colorRateNetwork(this.header.rates.network_in.rate_5m).padEnd(20)}  1h: ${colorRateNetwork(this.header.rates.network_in.rate_1h).padEnd(20)}  24h: ${colorRateNetwork(this.header.rates.network_in.rate_24h)}`,
+            `Out:   1m: ${colorRateNetwork(this.header.rates.network_out.rate_1m).padEnd(20)}  5m: ${colorRateNetwork(this.header.rates.network_out.rate_5m).padEnd(20)}  1h: ${colorRateNetwork(this.header.rates.network_out.rate_1h).padEnd(20)}  24h: ${colorRateNetwork(this.header.rates.network_out.rate_24h)}`,
             '',
             'Disk Rates:',
-            `Read  - 1h: ${formatRate(this.header.rates.disk_read.rate_1h)}, 24h: ${formatRate(this.header.rates.disk_read.rate_24h)}`,
-            `Write - 1h: ${formatRate(this.header.rates.disk_write.rate_1h)}, 24h: ${formatRate(this.header.rates.disk_write.rate_24h)}`,
+            `Read:  1m: ${colorRateDisk(this.header.rates.disk_read.rate_1m).padEnd(20)}  5m: ${colorRateDisk(this.header.rates.disk_read.rate_5m).padEnd(20)}  1h: ${colorRateDisk(this.header.rates.disk_read.rate_1h).padEnd(20)}  24h: ${colorRateDisk(this.header.rates.disk_read.rate_24h)}`,
+            `Write: 1m: ${colorRateDisk(this.header.rates.disk_write.rate_1m).padEnd(20)}  5m: ${colorRateDisk(this.header.rates.disk_write.rate_5m).padEnd(20)}  1h: ${colorRateDisk(this.header.rates.disk_write.rate_1h).padEnd(20)}  24h: ${colorRateDisk(this.header.rates.disk_write.rate_24h)}`,            
             '',
             'Complete Ledger Ranges:',
             ...(this.ranges ? this.ranges.map(range => 
@@ -564,6 +597,10 @@ server.on('message', (msg, rinfo) => {
 setInterval(() => {
     for (const card of servers.values()) {
         card.updateDisplay();
+        // Add this line to also update details box if it's open
+        if (card.detailsBox) {
+            card.updateDetailsBox();
+        }
     }
 }, 1000);
 
