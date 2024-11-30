@@ -194,21 +194,23 @@ function parseServerInfoHeader(buffer) {
         load_avg_5min: readDoubleLE(buffer, 272),
         load_avg_15min: readDoubleLE(buffer, 280),
         io_wait_time: readUInt64LE(buffer, 288),
-
-        // Network and disk rates (offset maintained for alignment)
+        cpu_cores: buffer.readUInt32LE(296),   // New field
+        padding4: buffer.readUInt32LE(300),    // New padding field
+        
+        // Network and disk rates (offset adjusted by 8 bytes for the new fields)
         rates: {
-            network_in: parseRateStats(buffer, 296),
-            network_out: parseRateStats(buffer, 328),
-            disk_read: parseRateStats(buffer, 360),
-            disk_write: parseRateStats(buffer, 392)
-        }
+            network_in: parseRateStats(buffer, 304),
+            network_out: parseRateStats(buffer, 336),
+            disk_read: parseRateStats(buffer, 368),
+            disk_write: parseRateStats(buffer, 400)
+        }        
     };
 
     return header;
 }
 
 // Calculate size of ServerInfoHeader structure
-const HEADER_SIZE = 424; 
+const HEADER_SIZE = 432; 
 function parseLedgerRanges(buffer, header) {
     const ranges = [];
     const rangeSize = 8; // Each range is 2 uint32_t values (start and end)
@@ -523,6 +525,7 @@ class ServerCard {
             warnings.length > 0 ? `\nWarnings: {red-fg}${warnings.join(', ')}{/red-fg}` : '',
             '',
             'System Metrics:',
+            `CPU Cores: ${this.header.cpu_cores}`,
             `Memory Usage: ${formatBytes(Number(this.header.process_memory_pages) * 4096)}`,
             `System Memory: ${formatBytes(Number(this.header.system_memory_used))} / ${formatBytes(Number(this.header.system_memory_total))}`,
             `Disk Usage: ${formatBytes(Number(this.header.system_disk_used))} / ${formatBytes(Number(this.header.system_disk_total))}`,
