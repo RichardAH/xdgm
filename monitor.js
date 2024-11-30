@@ -158,7 +158,7 @@ function parseServerInfoHeader(buffer) {
 }
 
 // Parse ledger ranges
-const HEADER_SIZE = 520;
+const HEADER_SIZE = 512;
 function parseLedgerRanges(buffer, header) {
     try {
         // The range should be at the very end of the packet
