@@ -294,6 +294,53 @@ function colorRateDisk(bytesPerSec) {
     }
 }
 
+function colorLoadAverage(loadAvg, cpuCores) {
+    const load = loadAvg.toFixed(2);
+    const perCoreLoad = loadAvg / cpuCores;
+    
+    if (perCoreLoad >= 0.8) {
+        return `{red-fg}${load}{/red-fg}`;  // Critical load (>80% per core)
+    } else if (perCoreLoad >= 0.6) {
+        return `{yellow-fg}${load}{/yellow-fg}`;  // High load (60-80% per core)
+    } else {
+        return `{green-fg}${load}{/green-fg}`;  // Normal load
+    }
+}
+
+function colorMemoryUsage(used, total) {
+    // Convert BigInt to Number if needed
+    const usedNum = typeof used === 'bigint' ? Number(used) : used;
+    const totalNum = typeof total === 'bigint' ? Number(total) : total;
+    
+    const usagePercent = (usedNum / totalNum) * 100;
+    const usageStr = formatBytes(usedNum);
+    
+    if (usagePercent >= 90) {
+        return `{red-fg}${usageStr}{/red-fg}`;  // Critical usage (>90%)
+    } else if (usagePercent >= 75) {
+        return `{yellow-fg}${usageStr}{/yellow-fg}`;  // High usage (75-90%)
+    } else {
+        return `{green-fg}${usageStr}{/green-fg}`;  // Normal usage
+    }
+}
+
+function colorDiskUsage(used, total) {
+    // Convert BigInt to Number if needed
+    const usedNum = typeof used === 'bigint' ? Number(used) : used;
+    const totalNum = typeof total === 'bigint' ? Number(total) : total;
+    
+    const usagePercent = (usedNum / totalNum) * 100;
+    const usageStr = formatBytes(usedNum);
+    
+    if (usagePercent >= 95) {
+        return `{red-fg}${usageStr}{/red-fg}`;  // Critical usage (>95%)
+    } else if (usagePercent >= 80) {
+        return `{yellow-fg}${usageStr}{/yellow-fg}`;  // High usage (80-95%)
+    } else {
+        return `{green-fg}${usageStr}{/green-fg}`;  // Normal usage
+    }
+}
+
 // Server card class to manage individual server displays
 class ServerCard {
     constructor(index) {
@@ -388,6 +435,9 @@ class ServerCard {
     
         const { ip, port } = formatAddress(this.rinfo.address, this.rinfo.port);
 
+        // Color-coded load average based on CPU cores
+        const loadAvgColored = colorLoadAverage(this.header.load_avg_1min, this.header.cpu_cores);
+
         const content = [
             `Node: ${nodeId.slice(0, 6)}...${nodeId.slice(-6)}`,
             `IP: ${ip}`,
@@ -395,7 +445,7 @@ class ServerCard {
             `Status: ${syncStatus}`,
             `Peers: ${this.header.peer_count}`,
             `Ledger: ${this.header.ledger_seq}`,
-            `Load: ${this.header.load_avg_1min.toFixed(2)}`,
+            `Load: ${loadAvgColored}`,
             warnings.length > 0 ? `Warnings: ${warnings.join(', ')}` : ''
         ].filter(Boolean).join('\n');
 
@@ -490,7 +540,6 @@ class ServerCard {
 
 
     updateDetailsBox() {
-
         if (!this.detailsBox) return;
 
         const warnings = this.getWarnings(this.header);
@@ -509,6 +558,10 @@ class ServerCard {
 
         const isNotSynced = !!(this.header.warning_flags & WARNING_FLAGS.NOT_SYNCED);
         const syncStatus = isNotSynced ? '{red-fg}NOT SYNCED{/red-fg}' : '{green-fg}SYNCED{/green-fg}';
+
+        // Calculate memory usage for process
+        const processMemory = Number(this.header.process_memory_pages) * 4096;
+
         const content = [
             `Server: ${this.rinfo.address}:${this.rinfo.port}`,
             `Node ID: ${this.getNodeId()}`,
@@ -526,10 +579,10 @@ class ServerCard {
             '',
             'System Metrics:',
             `CPU Cores: ${this.header.cpu_cores}`,
-            `Memory Usage: ${formatBytes(Number(this.header.process_memory_pages) * 4096)}`,
-            `System Memory: ${formatBytes(Number(this.header.system_memory_used))} / ${formatBytes(Number(this.header.system_memory_total))}`,
-            `Disk Usage: ${formatBytes(Number(this.header.system_disk_used))} / ${formatBytes(Number(this.header.system_disk_total))}`,
-            `Load Average: ${this.header.load_avg_1min.toFixed(2)}, ${this.header.load_avg_5min.toFixed(2)}, ${this.header.load_avg_15min.toFixed(2)}`,
+            `Memory Usage: ${colorMemoryUsage(processMemory, this.header.system_memory_total)}`,
+            `System Memory: ${colorMemoryUsage(this.header.system_memory_used, this.header.system_memory_total)} / ${formatBytes(Number(this.header.system_memory_total))}`,
+            `Disk Usage: ${colorDiskUsage(this.header.system_disk_used, this.header.system_disk_total)} / ${formatBytes(Number(this.header.system_disk_total))}`,
+            `Load Average: ${colorLoadAverage(this.header.load_avg_1min, this.header.cpu_cores)}, ${colorLoadAverage(this.header.load_avg_5min, this.header.cpu_cores)}, ${colorLoadAverage(this.header.load_avg_15min, this.header.cpu_cores)}`,
             '',
             'Network Rates:',
             `In:    1m: ${colorRateNetwork(this.header.rates.network_in.rate_1m).padEnd(20)}  5m: ${colorRateNetwork(this.header.rates.network_in.rate_5m).padEnd(20)}  1h: ${colorRateNetwork(this.header.rates.network_in.rate_1h).padEnd(20)}  24h: ${colorRateNetwork(this.header.rates.network_in.rate_24h)}`,
@@ -547,7 +600,7 @@ class ServerCard {
 
         this.detailsBox.setContent(content);
         screen.render();
-    }
+    }    
 }
 
 // Server management
