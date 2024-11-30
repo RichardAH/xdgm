@@ -562,6 +562,32 @@ class ServerCard {
         // Calculate memory usage for process
         const processMemory = Number(this.header.process_memory_pages) * 4096;
 
+        const periods = ['rate_1m', 'rate_5m', 'rate_1h', 'rate_24h'];
+        const formatPeriodHeader = () => {
+            return [
+                'Period', ' '.repeat(4),
+                '1m', ' '.repeat(17),
+                '5m', ' '.repeat(17),
+                '1h', ' '.repeat(17),
+                '24h'
+            ].join('');
+        };
+
+        const formatRateRow = (label, rates, colorFn) => {
+            const row = [label, ' '.repeat(10 - label.length)];
+            
+            // Format each time period's rate
+            periods.forEach((period, index) => {
+                const rate = rates[period];
+                const formattedRate = colorFn(rate).trim();
+                row.push(formattedRate)
+                row.push(' '.repeat(40 - (''+formattedRate).length));
+            });
+            
+            return row.join('');
+        };
+
+
         const content = [
             `Server: ${this.rinfo.address}:${this.rinfo.port}`,
             `Node ID: ${this.getNodeId()}`,
@@ -585,13 +611,15 @@ class ServerCard {
             `Load Average: ${colorLoadAverage(this.header.load_avg_1min, this.header.cpu_cores)}, ${colorLoadAverage(this.header.load_avg_5min, this.header.cpu_cores)}, ${colorLoadAverage(this.header.load_avg_15min, this.header.cpu_cores)}`,
             '',
             'Network Rates:',
-            `In:    1m: ${colorRateNetwork(this.header.rates.network_in.rate_1m).padEnd(20)}  5m: ${colorRateNetwork(this.header.rates.network_in.rate_5m).padEnd(20)}  1h: ${colorRateNetwork(this.header.rates.network_in.rate_1h).padEnd(20)}  24h: ${colorRateNetwork(this.header.rates.network_in.rate_24h)}`,
-            `Out:   1m: ${colorRateNetwork(this.header.rates.network_out.rate_1m).padEnd(20)}  5m: ${colorRateNetwork(this.header.rates.network_out.rate_5m).padEnd(20)}  1h: ${colorRateNetwork(this.header.rates.network_out.rate_1h).padEnd(20)}  24h: ${colorRateNetwork(this.header.rates.network_out.rate_24h)}`,
+            formatPeriodHeader(),
+            formatRateRow('In: ', this.header.rates.network_in, colorRateNetwork),
+            formatRateRow('Out:', this.header.rates.network_out, colorRateNetwork),
             '',
             'Disk Rates:',
-            `Read:  1m: ${colorRateDisk(this.header.rates.disk_read.rate_1m).padEnd(20)}  5m: ${colorRateDisk(this.header.rates.disk_read.rate_5m).padEnd(20)}  1h: ${colorRateDisk(this.header.rates.disk_read.rate_1h).padEnd(20)}  24h: ${colorRateDisk(this.header.rates.disk_read.rate_24h)}`,
-            `Write: 1m: ${colorRateDisk(this.header.rates.disk_write.rate_1m).padEnd(20)}  5m: ${colorRateDisk(this.header.rates.disk_write.rate_5m).padEnd(20)}  1h: ${colorRateDisk(this.header.rates.disk_write.rate_1h).padEnd(20)}  24h: ${colorRateDisk(this.header.rates.disk_write.rate_24h)}`,            
-            '',
+            formatPeriodHeader(),
+            formatRateRow('Read: ', this.header.rates.disk_read, colorRateDisk),
+            formatRateRow('Write:', this.header.rates.disk_write, colorRateDisk),
+            '',            
             'Complete Ledger Ranges:',
             ...(this.ranges ? this.ranges.map(range => 
                 `${range.start.toLocaleString()} - ${range.end.toLocaleString()}`
