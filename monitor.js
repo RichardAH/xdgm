@@ -53,6 +53,27 @@ function parseRateStats(buffer, offset) {
     };
 }
 
+function parseObjectCounts(buffer, header) {
+    try {
+        const objectCountOffset =  568 + (header.ledger_range_count * 8);
+        const counts = [];
+        const remainingBytes = buffer.length - objectCountOffset;
+        const numObjects = Math.floor(remainingBytes / 28); // Each record is 28 bytes
+
+        for (let i = 0; i < numObjects; i++) {
+            const offset = objectCountOffset + (i * 28);
+            const nameBuffer = buffer.slice(offset, offset + 20);
+            const name = nameBuffer.toString('utf8').replace(/\0+$/, ''); // Remove null padding
+            const count = Number(readUInt64LE(buffer, offset + 20)); // 8-byte count after name
+            counts.push({ name, count });
+        }
+        return counts;
+    } catch (err) {
+        console.debug('Error parsing object counts:', err.message);
+        return [];
+    }
+}
+
 // Parse server info header
 function parseServerInfoHeader(buffer) {
 //    if (buffer.length < 512) {
@@ -164,15 +185,18 @@ function parseServerInfoHeader(buffer) {
     return header;
 }
 
-// Parse ledger ranges
 function parseLedgerRanges(buffer, header) {
     try {
-        // The range should be at the very end of the packet
-        const rangeOffset = buffer.length - 8;
-        return [{
-            start: buffer.readUInt32LE(rangeOffset),
-            end: buffer.readUInt32LE(rangeOffset + 4)
-        }];
+        const rangeOffset = 568;
+        const ranges = [];
+        for (let i = 0; i < header.ledger_range_count; i++) {
+            const offset = rangeOffset + (i * 8);
+            ranges.push({
+                start: buffer.readUInt32LE(offset),
+                end: buffer.readUInt32LE(offset + 4)
+            });
+        }
+        return ranges;
     } catch (err) {
         console.debug('Error parsing ledger range:', err.message);
         return [];
@@ -544,6 +568,7 @@ if (RAW_MODE) {
 
             const content = [
                 `Node: ${nodeId.slice(0, 6)}...${nodeId.slice(-6)}`,
+                `Ver: ${this.header.version_string.trim()}`,
                 `IP: ${ip}`,
                 `NetID: ${this.header.network_id}`,
                 `Status: ${syncStatus}`,
@@ -771,7 +796,9 @@ if (RAW_MODE) {
 
             const header = parseServerInfoHeader(msg);
             const serverKey = header.node_public_key;
-
+            const ranges = parseLedgerRanges(msg, header);
+            const objectCounts = parseObjectCounts(msg, header);
+        
             if (!servers.has(serverKey)) {
                 const slot = getNextSlot();
                 if (slot !== null) {
@@ -790,7 +817,7 @@ if (RAW_MODE) {
                 } catch (err) {
                     console.debug('Failed to parse ledger ranges:', err.message);
                 }
-                card.update(header, rinfo, ranges);
+                card.update(header, rinfo, ranges, objectCounts);
             }
         } catch (err) {
             console.debug('Error processing packet:', err.message);
