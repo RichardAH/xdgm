@@ -55,110 +55,116 @@ function parseRateStats(buffer, offset) {
 
 // Parse server info header
 function parseServerInfoHeader(buffer) {
-    if (buffer.length < 8) {
-        throw new Error('Packet too small');
-    }
-
-    const magic = buffer.readUInt32LE(0);
-    if (magic !== SERVER_INFO_MAGIC) {
-        throw new Error(`Invalid magic number: ${magic.toString(16)}`);
-    }
+//    if (buffer.length < 512) {
+//        throw new Error('Packet too small');
+//    }
 
     function bigIntToNumber(value) {
         return typeof value === 'bigint' ? Number(value) : value;
     }
 
-    let offset = 0;
     const header = {};
 
     // Fixed header fields (32-bit values)
-    header.magic = buffer.readUInt32LE(offset);                    offset += 4;
-    header.version = buffer.readUInt32LE(offset);                  offset += 4;
-    header.network_id = buffer.readUInt32LE(offset);               offset += 4;
-    header.server_state = buffer.readUInt32LE(offset);             offset += 4;
-    header.peer_count = buffer.readUInt32LE(offset);               offset += 4;
-    header.node_size = buffer.readUInt32LE(offset);                offset += 4;
-    header.cpu_cores = buffer.readUInt32LE(offset);                offset += 4;
-    header.ledger_range_count = buffer.readUInt32LE(offset);       offset += 4;
-    header.warning_flags = buffer.readUInt32LE(offset);            offset += 4;
+    header.magic = buffer.readUInt32LE(0);                       // 0
+    header.version = buffer.readUInt32LE(4);                     // 4
+    header.network_id = buffer.readUInt32LE(8);                  // 8
+    header.server_state = buffer.readUInt32LE(12);               // 12
+    header.peer_count = buffer.readUInt32LE(16);                 // 16
+    header.node_size = buffer.readUInt32LE(20);                  // 20
+    header.cpu_cores = buffer.readUInt32LE(24);                  // 24
+    header.ledger_range_count = buffer.readUInt32LE(28);         // 28
+    header.warning_flags = buffer.readUInt32LE(32);              // 32
+    
+     // padding_1                                                // 36
 
-    offset += 4; // padding alignment
-
-    // 64-bit metrics
-    header.timestamp = bigIntToNumber(readUInt64LE(buffer, offset));           offset += 8;
-    header.uptime = bigIntToNumber(readUInt64LE(buffer, offset));             offset += 8;
-    header.io_latency_us = bigIntToNumber(readUInt64LE(buffer, offset));      offset += 8;
-    header.validation_quorum = bigIntToNumber(readUInt64LE(buffer, offset));   offset += 8;
-    header.fetch_pack_size = bigIntToNumber(readUInt64LE(buffer, offset));    offset += 8;
-    header.proposer_count = bigIntToNumber(readUInt64LE(buffer, offset));     offset += 8;
-    header.converge_time_ms = bigIntToNumber(readUInt64LE(buffer, offset));   offset += 8;
-    header.load_factor = bigIntToNumber(readUInt64LE(buffer, offset));        offset += 8;
-    header.load_base = bigIntToNumber(readUInt64LE(buffer, offset));          offset += 8;
-    header.reserve_base = bigIntToNumber(readUInt64LE(buffer, offset));       offset += 8;
-    header.reserve_inc = bigIntToNumber(readUInt64LE(buffer, offset));        offset += 8;
-    header.ledger_seq = bigIntToNumber(readUInt64LE(buffer, offset));         offset += 8;
+    // 64-bit metrics starting at offset 40
+    header.timestamp = bigIntToNumber(readUInt64LE(buffer, 40));
+    header.uptime = bigIntToNumber(readUInt64LE(buffer, 48));
+    header.io_latency_us = bigIntToNumber(readUInt64LE(buffer, 56));
+    header.validation_quorum = bigIntToNumber(readUInt64LE(buffer, 64));
+    header.fetch_pack_size = bigIntToNumber(readUInt64LE(buffer, 72));
+    header.proposer_count = bigIntToNumber(readUInt64LE(buffer, 80));
+    header.converge_time_ms = bigIntToNumber(readUInt64LE(buffer, 88));
+    header.load_factor = bigIntToNumber(readUInt64LE(buffer, 96));
+    header.load_base = bigIntToNumber(readUInt64LE(buffer, 104));
+    header.reserve_base = bigIntToNumber(readUInt64LE(buffer, 112));
+    header.reserve_inc = bigIntToNumber(readUInt64LE(buffer, 120));
+    header.ledger_seq = bigIntToNumber(readUInt64LE(buffer, 128));
 
     // Fixed-size byte arrays
-    header.ledger_hash = buffer.slice(offset, offset + 32).toString('hex');   offset += 32;
-    header.node_public_key = buffer.slice(offset, offset + 33).toString('hex'); offset += 33;
-    // Skip padding2[7]
-    header.padding2 = buffer.slice(offset, offset + 7).toString('hex');       offset += 7;
-
-    // System metrics (64-bit values)
-    header.process_memory_pages = bigIntToNumber(readUInt64LE(buffer, offset)); offset += 8;
-    header.system_memory_total = bigIntToNumber(readUInt64LE(buffer, offset));  offset += 8;
-    header.system_memory_free = bigIntToNumber(readUInt64LE(buffer, offset));   offset += 8;
-    header.system_memory_used = bigIntToNumber(readUInt64LE(buffer, offset));   offset += 8;
-    header.system_disk_total = bigIntToNumber(readUInt64LE(buffer, offset));    offset += 8;
-    header.system_disk_free = bigIntToNumber(readUInt64LE(buffer, offset));     offset += 8;
-    header.system_disk_used = bigIntToNumber(readUInt64LE(buffer, offset));     offset += 8;
-    header.io_wait_time = bigIntToNumber(readUInt64LE(buffer, offset));         offset += 8;
+    header.ledger_hash = buffer.slice(136, 168).toString('hex');     // 32 bytes
+    header.node_public_key = buffer.slice(168, 201).toString('hex'); // 33 bytes
+    // padding 7 bytes
+    // Version string (32 bytes) starting at offset 201
+    header.version_string = buffer.slice(201, 233).toString('utf8').replace(/\0+$/, ''); // 32 bytes, trim null padding
+    
+    // System metrics
+    header.process_memory_pages = bigIntToNumber(readUInt64LE(buffer, 240));  // 208 + 32
+    header.system_memory_total = bigIntToNumber(readUInt64LE(buffer, 248));   // 216 + 32
+    header.system_memory_free = bigIntToNumber(readUInt64LE(buffer, 256));    // 224 + 32
+    header.system_memory_used = bigIntToNumber(readUInt64LE(buffer, 264));    // 232 + 32
+    header.system_disk_total = bigIntToNumber(readUInt64LE(buffer, 272));     // 240 + 32
+    header.system_disk_free = bigIntToNumber(readUInt64LE(buffer, 280));      // 248 + 32
+    header.system_disk_used = bigIntToNumber(readUInt64LE(buffer, 288));      // 256 + 32
+    header.io_wait_time = bigIntToNumber(readUInt64LE(buffer, 296));         // 264 + 32
 
     // Load averages (doubles)
-    header.load_avg_1min = readDoubleLE(buffer, offset);           offset += 8;
-    header.load_avg_5min = readDoubleLE(buffer, offset);           offset += 8;
-    header.load_avg_15min = readDoubleLE(buffer, offset);          offset += 8;
-
+    header.load_avg_1min = readDoubleLE(buffer, 304);    // 272 + 32
+    header.load_avg_5min = readDoubleLE(buffer, 312);    // 280 + 32
+    header.load_avg_15min = readDoubleLE(buffer, 320);   // 288 + 32
+    
     // State transitions
-    header.state_transitions = new Array(5).fill(0).map(() => {
-        const val = bigIntToNumber(readUInt64LE(buffer, offset));
-        offset += 8;
-        return val;
-    });
+    header.state_transitions = [];
+    for (let i = 0; i < 5; i++) {
+        header.state_transitions.push(
+            bigIntToNumber(readUInt64LE(buffer, 328 + (i * 8)))  // 296 + 32
+        );
+    }
 
     // State durations
-    header.state_durations = new Array(5).fill(0).map(() => {
-        const val = bigIntToNumber(readUInt64LE(buffer, offset));
-        offset += 8;
-        return val;
-    });
-
-    header.initial_sync_us = bigIntToNumber(readUInt64LE(buffer, offset)); offset += 8;
-
-    // Network and disk rates
-    header.rates = {}
-    header.rates.network_in = parseRateStats(buffer, offset);        offset += 32;
-    header.rates.network_out = parseRateStats(buffer, offset);       offset += 32;
-    header.rates.disk_read = parseRateStats(buffer, offset);         offset += 32;
-    header.rates.disk_write = parseRateStats(buffer, offset);        offset += 32;
-        
-
-    // Debug output
-    const DEBUG = false;
-    if (DEBUG) {
-        console.debug(`Total bytes parsed: ${offset}`);
-        console.debug("\nKey fields:");
-        console.debug(`peer_count: ${header.peer_count}`);
-        console.debug(`ledger_range_count: ${header.ledger_range_count}`);
-        console.debug(`ledger_seq: ${header.ledger_seq}`);
-        console.debug(`node_public_key: ${header.node_public_key}`);
+    header.state_durations = [];
+    for (let i = 0; i < 5; i++) {
+        header.state_durations.push(
+            bigIntToNumber(readUInt64LE(buffer, 368 + (i * 8)))  // 336 + 32
+        );
     }
+
+    header.initial_sync_us = bigIntToNumber(readUInt64LE(buffer, 408));  // 376 + 32
+    
+    // Network and disk rates
+    header.rates = {
+        network_in: {
+            rate_1m: readDoubleLE(buffer, 416),   // 384 + 32
+            rate_5m: readDoubleLE(buffer, 424),   // 392 + 32
+            rate_1h: readDoubleLE(buffer, 432),   // 400 + 32
+            rate_24h: readDoubleLE(buffer, 440)   // 408 + 32
+        },
+        network_out: {
+            rate_1m: readDoubleLE(buffer, 448),   // 416 + 32
+            rate_5m: readDoubleLE(buffer, 456),   // 424 + 32
+            rate_1h: readDoubleLE(buffer, 464),   // 432 + 32
+            rate_24h: readDoubleLE(buffer, 472)   // 440 + 32
+        },
+        disk_read: {
+            rate_1m: readDoubleLE(buffer, 480),   // 448 + 32
+            rate_5m: readDoubleLE(buffer, 488),   // 456 + 32
+            rate_1h: readDoubleLE(buffer, 496),   // 464 + 32
+            rate_24h: readDoubleLE(buffer, 504)   // 472 + 32
+        },
+        disk_write: {
+            rate_1m: readDoubleLE(buffer, 512),   // 480 + 32
+            rate_5m: readDoubleLE(buffer, 520),   // 488 + 32
+            rate_1h: readDoubleLE(buffer, 528),   // 496 + 32
+            rate_24h: readDoubleLE(buffer, 536)   // 504 + 32
+        }
+    }
+
 
     return header;
 }
 
 // Parse ledger ranges
-const HEADER_SIZE = 512;
 function parseLedgerRanges(buffer, header) {
     try {
         // The range should be at the very end of the packet
@@ -758,10 +764,10 @@ if (RAW_MODE) {
     server.on('message', (msg, rinfo) => {
         try {
             // First validate minimum packet size
-            if (msg.length < HEADER_SIZE) {
-                console.debug(`Packet too small: ${msg.length} bytes (minimum ${HEADER_SIZE} required)`);
-                return;
-            }
+//            if (msg.length < HEADER_SIZE) {
+//                console.debug(`Packet too small: ${msg.length} bytes (minimum ${HEADER_SIZE} required)`);
+//                return;
+//            }
 
             const header = parseServerInfoHeader(msg);
             const serverKey = header.node_public_key;
