@@ -58,13 +58,14 @@ function parseObjectCounts(buffer, header) {
         const objectCountOffset =  568 + (header.ledger_range_count * 8);
         const counts = [];
         const remainingBytes = buffer.length - objectCountOffset;
-        const numObjects = Math.floor(remainingBytes / 28); // Each record is 28 bytes
+        const numObjects = Math.floor(remainingBytes / 64); // Each record is 64 bytes
+
 
         for (let i = 0; i < numObjects; i++) {
-            const offset = objectCountOffset + (i * 28);
-            const nameBuffer = buffer.slice(offset, offset + 20);
+            const offset = objectCountOffset + (i * 64);
+            const nameBuffer = buffer.slice(offset, offset + 56);
             const name = nameBuffer.toString('utf8').replace(/\0+$/, ''); // Remove null padding
-            const count = Number(readUInt64LE(buffer, offset + 20)); // 8-byte count after name
+            const count = Number(readUInt64LE(buffer, offset + 56)); // 8-byte count after name
             counts.push({ name, count });
         }
         return counts;
@@ -384,8 +385,20 @@ if (RAW_MODE) {
         style: {
             fg: 'white',
             bg: 'black'
+        },
+        scrollable: true,
+        alwaysScroll: true,
+        scrollbar: {
+            ch: ' ',
+            track: {
+                bg: 'cyan'
+            },
+            style: {
+                inverse: true
+            }
         }
     });
+
 
     // Create header
     const header = blessed.box({
@@ -466,16 +479,19 @@ if (RAW_MODE) {
     // Server card class to manage individual server displays
     class ServerCard {
         constructor(index) {
-            const row = Math.floor(index / COLS);
-            const col = index % COLS;
+            const CARDS_PER_ROW = 5;
+            const CARD_HEIGHT_PERCENT = 25; // 25% of visible area for 4 rows
+            
+            const row = Math.floor(index / CARDS_PER_ROW);
+            const col = index % CARDS_PER_ROW;
             
             this.lastUpdate = Date.now();
             this.box = blessed.box({
                 parent: gridContainer,
-                top: `${row * CARD_HEIGHT}%`,
-                left: `${col * CARD_WIDTH}%`,
-                width: `${CARD_WIDTH}%`,
-                height: `${CARD_HEIGHT}%`,
+                top: row * CARD_HEIGHT_PERCENT + '%',
+                left: col * 20 + '%', // 20% for 5 columns
+                width: '20%',
+                height: CARD_HEIGHT_PERCENT + '%',
                 border: {
                     type: 'line'
                 },
@@ -491,10 +507,11 @@ if (RAW_MODE) {
             });
 
             this.detailsBox = null;
+            this.objectCounts = [];
             this.box.on('click', () => this.toggleDetails());
             this.lastUpdate = 0;
             this.isAwol = false;
-        }
+        }        
 
         getNodeId() {
             if (!this.header) return 'Unknown';
@@ -518,7 +535,7 @@ if (RAW_MODE) {
             return warnings;
         }
 
-        update(header, rinfo, ranges) {
+        update(header, rinfo, ranges, objectCounts) {
             const isFirstUpdate = !this.header;
             const hadWarnings = this.header ? this.getWarnings(this.header).length > 0 : false;
             
@@ -526,6 +543,7 @@ if (RAW_MODE) {
             this.header = header;
             this.rinfo = rinfo;
             this.ranges = ranges;
+            this.objectCounts = objectCounts || [];
             
             const currentWarnings = this.getWarnings(header);
             if (!isFirstUpdate && currentWarnings.length > hadWarnings) {
@@ -666,7 +684,7 @@ if (RAW_MODE) {
         }
 
         updateDetailsBox() {
-            if (!this.detailsBox) return;
+            if (!this.detailsBox || !this.header || !this.rinfo) return;
 
             // If we don't have data yet, show waiting message
             if (!this.header || !this.rinfo) {
@@ -715,6 +733,15 @@ if (RAW_MODE) {
                 return row.join('');
             };
 
+            const objectCountsSection = [
+                '',
+                'Object Counts:',
+                ...(this.objectCounts && this.objectCounts.length > 0
+                    ? this.objectCounts.map(({name, count}) => 
+                        `${name}: ${count.toLocaleString()}`)
+                    : ['No object counts available'])
+            ].join('\n');
+
             const content = [
                 `Server: ${this.rinfo.address}:${this.rinfo.port}`,
                 `Node ID: ${this.getNodeId()}`,
@@ -756,7 +783,8 @@ if (RAW_MODE) {
                 this.header.state_transitions.map((count, i) =>
                     `${["Disconnect", "Connect", "Syncing", "Tracking", "Full"][i]}: ${count} transitions, Duration: ${formatDuration(Number(this.header.state_durations[i]))}`
                 ).join('\n'),
-                `Initial Sync Time: ${formatDuration(Number(this.header.initial_sync_us))}`
+                `Initial Sync Time: ${formatDuration(Number(this.header.initial_sync_us))}`,
+                objectCountsSection
             ].join('\n');
 
             this.detailsBox.setContent(content);
