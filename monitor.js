@@ -55,18 +55,25 @@ function parseRateStats(buffer, offset) {
 
 function parseObjectCounts(buffer, header) {
     try {
-        const objectCountOffset =  568 + (header.ledger_range_count * 8);
+        const objectCountOffset = 568 + (header.ledger_range_count * 8);
         const counts = [];
         const remainingBytes = buffer.length - objectCountOffset;
-        const numObjects = Math.floor(remainingBytes / 64); // Each record is 64 bytes
-
+        const numObjects = Math.floor(remainingBytes / 64); // Each record is 56 + 8 = 64 bytes
 
         for (let i = 0; i < numObjects; i++) {
             const offset = objectCountOffset + (i * 64);
+
+            // Read the name (56 bytes)
             const nameBuffer = buffer.slice(offset, offset + 56);
             const name = nameBuffer.toString('utf8').replace(/\0+$/, ''); // Remove null padding
-            const count = Number(readUInt64LE(buffer, offset + 56)); // 8-byte count after name
-            counts.push({ name, count });
+
+            // Read the count (8 bytes) as a 64-bit integer
+            const count = Number(readUInt64LE(buffer, offset + 56));
+
+            // Only add non-empty names
+            if (name.length > 0) {
+                counts.push({ name, count });
+            }
         }
         return counts;
     } catch (err) {
@@ -313,6 +320,7 @@ function handleRawPacket(msg, rinfo) {
     try {
         const header = parseServerInfoHeader(msg);
         const ranges = parseLedgerRanges(msg, header);
+        const objectCounts = parseObjectCounts(msg, header);
         
         console.log('\nParsed Header:');
         console.log(JSON.stringify(header, (key, value) => {
@@ -325,6 +333,9 @@ function handleRawPacket(msg, rinfo) {
         console.log('\nLedger Ranges:');
         console.log(JSON.stringify(ranges, null, 2));
         
+        console.log('\nObject Counts:')
+        console.log(JSON.stringify(objectCounts, null, 2));
+
     } catch (err) {
         console.error('Error parsing packet:', err);
     }
