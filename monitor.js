@@ -111,6 +111,7 @@ function parseServerInfoHeader(buffer) {
 
     // 64-bit metrics starting at offset 40
     header.timestamp = bigIntToNumber(readUInt64LE(buffer, 40));
+    header.ping = Math.ceil(Date.now() - (header.timestamp/1000))
     header.uptime = bigIntToNumber(readUInt64LE(buffer, 48));
     header.io_latency_us = bigIntToNumber(readUInt64LE(buffer, 56));
     header.validation_quorum = bigIntToNumber(readUInt64LE(buffer, 64));
@@ -648,9 +649,10 @@ if (RAW_MODE) {
 
             const content = [
                 `Node: ${nodeId.slice(0, 6)}...${nodeId.slice(-6)}`,
-                `Ver: ${this.header.version_string.trim()}`,
+                `Ver: ${this.header.version_string.trim().slice(0, 23)}`,
                 `IP: ${ip}`,
                 `NetID: ${this.header.network_id}`,
+                `Ping: ${this.header.ping} ms`,
                 `Status: ${syncStatus}`,
                 `Peers: ${this.header.peer_count}`,
                 `Ledger: ${this.header.ledger_seq}`,
@@ -797,61 +799,95 @@ if (RAW_MODE) {
 
             const debugCounters = this.debugCounters;
 
-            const debugCountersSection = debugCounters ? [
-                '',
-                'Debug Counters:',
-                `Database Size: ${formatBytes(debugCounters.dbKBTotal * 1024)}`,  // Convert KiB to bytes
-                `Ledger DB: ${formatBytes(debugCounters.dbKBLedger * 1024)}`,    // Convert KiB to bytes
-                `Transaction DB: ${formatBytes(debugCounters.dbKBTransaction * 1024)}`, // Convert KiB to bytes
-                `Local Transactions: ${debugCounters.localTxCount.toLocaleString()}`,
-                `Write Load: ${debugCounters.writeLoad}`,
-                `Historical Per Minute: ${debugCounters.historicalPerMinute}`,
-                '',
-                'Cache Statistics:',
-                `SLE Hit Rate: ${formatHitRate(debugCounters.sleHitRate / 1000)}`,      // Convert to percentage
-                `Ledger Hit Rate: ${formatHitRate(debugCounters.ledgerHitRate / 100000)}`, // Convert to percentage
-                `AL Size: ${debugCounters.alSize}`,
-                `AL Hit Rate: ${formatHitRate(debugCounters.alHitRate / 100000)}`,        // Convert to percentage
-                `Fullbelow Size: ${debugCounters.fullbelowSize.toLocaleString()}`,
-                `Treenode Cache Size: ${debugCounters.treenodeCacheSize.toLocaleString()}`,
-                `Treenode Track Size: ${debugCounters.treenodeTrackSize.toLocaleString()}`,
-                '',
-                'Node Statistics:',
-                `Node Reads Total: ${debugCounters.nodeFetchCount.toLocaleString()}`,
-                `Node Read Hits: ${debugCounters.nodeFetchHitCount.toLocaleString()}`,
-                `Node Read Bytes: ${formatBytes(debugCounters.nodeFetchSize)}`,
-                `Node Writes: ${debugCounters.nodeWriteCount.toLocaleString()}`,
-                `Node Written Bytes: ${formatBytes(debugCounters.nodeWriteSize)}`,
-                '',
-                'Memory Objects:',
-                `STObject Count: ${debugCounters.ripple_STObject || 0}`,
-                `STArray Count: ${debugCounters.ripple_STArray || 0}`,
-                `STAmount Count: ${debugCounters.ripple_STAmount || 0}`,
-                `STLedgerEntry Count: ${debugCounters.ripple_STLedgerEntry || 0}`,
-                `STTx Count: ${debugCounters.ripple_STTx || 0}`,
-                `STValidation Count: ${debugCounters.ripple_STValidation || 0}`,
-                '',
-                'SHAMap Objects:',
-                `Account State Leaf Nodes: ${debugCounters.ripple_SHAMapAccountStateLeafNode || 0}`,
-                `Inner Nodes: ${debugCounters.ripple_SHAMapInnerNode || 0}`,
-                `Items: ${debugCounters.ripple_SHAMapItem || 0}`,
-                `Tx Leaf Nodes: ${debugCounters.ripple_SHAMapTxLeafNode || 0}`,
-                `Tx Plus Meta Leaf Nodes: ${debugCounters.ripple_SHAMapTxPlusMetaLeafNode || 0}`,
-                '',
-                'Other Objects:',
-                `Accepted Ledger: ${debugCounters.ripple_AcceptedLedger || 0}`,
-                `Accepted LedgerTx: ${debugCounters.ripple_AcceptedLedgerTx || 0}`,
-                `HashRouter Entries: ${debugCounters.ripple_HashRouter_Entry || 0}`,
-                `Inbound Ledger: ${debugCounters.ripple_InboundLedger || 0}`,
-                `Ledger: ${debugCounters.ripple_Ledger || 0}`,
-                `Transaction: ${debugCounters.ripple_Transaction || 0}`,
-                '',
-                'Thread Stats:',
-                `Read Queue Size: ${debugCounters.read_queue || 0}`,
-                `Read Request Bundle: ${debugCounters.read_request_bundle || 0}`,
-                `Read Threads Running: ${debugCounters.read_threads_running || 0}`,
-                `Read Threads Total: ${debugCounters.read_threads_total || 0}`
-            ].join('\n') : '\nDebug Counters: Not available';            
+            const createSection = (title, entries) => {
+                const nonZeroEntries = entries.filter(([_, value]) => value !== 0 && value != undefined);
+                if (nonZeroEntries.length === 0) return '';
+                
+                return [
+                    '',
+                    title + ':',
+                    ...nonZeroEntries.map(([label, value]) => `${label}: ${value}`)
+                ].join('\n');
+            };
+
+            // Database section
+            const dbSection = createSection('Debug Counters', [
+                ['Database Size', formatBytes(debugCounters.dbKBTotal * 1024)],
+                ['Ledger DB', formatBytes(debugCounters.dbKBLedger * 1024)],
+                ['Transaction DB', formatBytes(debugCounters.dbKBTransaction * 1024)],
+                ['Local Transactions', debugCounters.localTxCount],
+                ['Write Load', debugCounters.writeLoad],
+                ['Historical Per Minute', debugCounters.historicalPerMinute]
+            ]);
+
+            // Cache section
+            const cacheSection = createSection('Cache Statistics', [
+                ['SLE Hit Rate', formatHitRate(debugCounters.sleHitRate / 1000)],
+                ['Ledger Hit Rate', formatHitRate(debugCounters.ledgerHitRate / 100000)],
+                ['AL Size', debugCounters.alSize],
+                ['AL Hit Rate', formatHitRate(debugCounters.alHitRate / 100000)],
+                ['Fullbelow Size', debugCounters.fullbelowSize.toLocaleString()],
+                ['Treenode Cache Size', debugCounters.treenodeCacheSize.toLocaleString()],
+                ['Treenode Track Size', debugCounters.treenodeTrackSize.toLocaleString()]
+            ]);
+
+            // Node statistics section
+            const nodeSection = createSection('Node Statistics', [
+                ['Node Reads Total', debugCounters.nodeFetchCount.toLocaleString()],
+                ['Node Read Hits', debugCounters.nodeFetchHitCount.toLocaleString()],
+                ['Node Read Bytes', formatBytes(debugCounters.nodeFetchSize)],
+                ['Node Writes', debugCounters.nodeWriteCount.toLocaleString()],
+                ['Node Written Bytes', formatBytes(debugCounters.nodeWriteSize)]
+            ]);
+
+            // Memory objects section
+            const memorySection = createSection('Memory Objects', [
+                ['STObject Count', debugCounters.ripple_STObject],
+                ['STArray Count', debugCounters.ripple_STArray],
+                ['STAmount Count', debugCounters.ripple_STAmount],
+                ['STLedgerEntry Count', debugCounters.ripple_STLedgerEntry],
+                ['STTx Count', debugCounters.ripple_STTx],
+                ['STValidation Count', debugCounters.ripple_STValidation]
+            ]);
+
+            // SHAMap objects section
+            const shaMapSection = createSection('SHAMap Objects', [
+                ['Account State Leaf Nodes', debugCounters.ripple_SHAMapAccountStateLeafNode],
+                ['Inner Nodes', debugCounters.ripple_SHAMapInnerNode],
+                ['Items', debugCounters.ripple_SHAMapItem],
+                ['Tx Leaf Nodes', debugCounters.ripple_SHAMapTxLeafNode],
+                ['Tx Plus Meta Leaf Nodes', debugCounters.ripple_SHAMapTxPlusMetaLeafNode]
+            ]);
+
+            // Other objects section
+            const otherSection = createSection('Other Objects', [
+                ['Accepted Ledger', debugCounters.ripple_AcceptedLedger],
+                ['Accepted LedgerTx', debugCounters.ripple_AcceptedLedgerTx],
+                ['HashRouter Entries', debugCounters.ripple_HashRouter_Entry],
+                ['Inbound Ledger', debugCounters.ripple_InboundLedger],
+                ['Ledger', debugCounters.ripple_Ledger],
+                ['Transaction', debugCounters.ripple_Transaction]
+            ]);
+
+            // Thread stats section
+            const threadSection = createSection('Thread Stats', [
+                ['Read Queue Size', debugCounters.read_queue],
+                ['Read Request Bundle', debugCounters.read_request_bundle],
+                ['Read Threads Running', debugCounters.read_threads_running],
+                ['Read Threads Total', debugCounters.read_threads_total]
+            ]);
+
+            // Combine all sections, filtering out empty ones
+            const debugCountersSection = [
+                dbSection,
+                cacheSection,
+                nodeSection,
+                memorySection,
+                shaMapSection,
+                otherSection,
+                threadSection
+            ].filter(Boolean).join('\n');
+
 
             const objectCountsSection = [
                 '',
@@ -868,6 +904,7 @@ if (RAW_MODE) {
                 `Network ID: ${this.header.network_id}`,
                 `Sync Status: ${syncStatus}`,
                 `Uptime: ${moment.duration(Number(this.header.uptime), 'seconds').humanize()}`,
+                `Ping: ${this.header.ping} ms`,
                 `IO Latency: ${Number(this.header.io_latency_us)}µs`,
                 `Peer Count: ${this.header.peer_count}`,
                 `Node Size: ${this.header.node_size}`,
@@ -904,7 +941,7 @@ if (RAW_MODE) {
                     `${["Disconnect", "Connect", "Syncing", "Tracking", "Full"][i]}: ${count} transitions, Duration: ${formatDuration(Number(this.header.state_durations[i]))}`
                 ).join('\n'),
                 `Initial Sync Time: ${formatDuration(Number(this.header.initial_sync_us))}`,
-                debugCountersSection,
+                debugCountersSection || '\nDebug Counters: No non-zero values',
                 objectCountsSection
             ].join('\n');
 
