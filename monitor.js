@@ -15,6 +15,8 @@ const WARNING_FLAGS = {
     NOT_SYNCED: 1 << 3
 };
 
+const HEADER_SIZE = 708;
+
 // Add command line argument parsing
 const args = process.argv.slice(2);
 const RAW_MODE = args.includes('--raw') || args.includes('-r');
@@ -55,7 +57,7 @@ function parseRateStats(buffer, offset) {
 
 function parseObjectCounts(buffer, header) {
     try {
-        const objectCountOffset = 568 + (header.ledger_range_count * 8);
+        const objectCountOffset = HEADER_SIZE + (header.ledger_range_count * 8);
         const counts = [];
         const remainingBytes = buffer.length - objectCountOffset;
         const numObjects = Math.floor(remainingBytes / 64); // Each record is 56 + 8 = 64 bytes
@@ -193,9 +195,52 @@ function parseServerInfoHeader(buffer) {
     return header;
 }
 
+function bigIntToNumber(x)
+{
+    return Number(x + '')
+}
+
+function parseDebugCounters(buffer) {
+    // Start at offset 544 as per specification
+    try {
+        return {
+            dbKBTotal: bigIntToNumber(readUInt64LE(buffer, 544)),
+            dbKBLedger: bigIntToNumber(readUInt64LE(buffer, 552)),
+            dbKBTransaction: bigIntToNumber(readUInt64LE(buffer, 560)),
+            localTxCount: bigIntToNumber(readUInt64LE(buffer, 568)),
+            writeLoad: buffer.readUInt32LE(576),
+            historicalPerMinute: buffer.readUInt32LE(580),
+            sleHitRate: buffer.readUInt32LE(584),
+            ledgerHitRate: buffer.readUInt32LE(588),
+            alSize: buffer.readUInt32LE(592),
+            alHitRate: buffer.readUInt32LE(596),
+            fullbelowSize: buffer.readUInt32LE(600),
+            treenodeCacheSize: buffer.readUInt32LE(604),
+            treenodeTrackSize: buffer.readUInt32LE(608),
+            shardFullbelowSize: buffer.readUInt32LE(612),
+            shardTreenodeCacheSize: buffer.readUInt32LE(616),
+            shardTreenodeTrackSize: buffer.readUInt32LE(620),
+            shardWriteLoad: buffer.readUInt32LE(624),
+            shardNodeWrites: bigIntToNumber(readUInt64LE(buffer, 628)),
+            shardNodeReadsTotal: bigIntToNumber(readUInt64LE(buffer, 636)),
+            shardNodeReadsHit: bigIntToNumber(readUInt64LE(buffer, 644)),
+            shardNodeWrittenBytes: bigIntToNumber(readUInt64LE(buffer, 652)),
+            shardNodeReadBytes: bigIntToNumber(readUInt64LE(buffer, 660)),
+            nodeWriteCount: bigIntToNumber(readUInt64LE(buffer, 668)),
+            nodeWriteSize: bigIntToNumber(readUInt64LE(buffer, 676)),
+            nodeFetchCount: bigIntToNumber(readUInt64LE(buffer, 684)),
+            nodeFetchHitCount: bigIntToNumber(readUInt64LE(buffer, 692)),
+            nodeFetchSize: bigIntToNumber(readUInt64LE(buffer, 700))
+        };
+    } catch (err) {
+        console.debug('Error parsing debug counters:', err.message);
+        return null;
+    }
+}
+
 function parseLedgerRanges(buffer, header) {
     try {
-        const rangeOffset = 568;
+        const rangeOffset = HEADER_SIZE;
         const ranges = [];
         for (let i = 0; i < header.ledger_range_count; i++) {
             const offset = rangeOffset + (i * 8);
@@ -481,6 +526,11 @@ if (RAW_MODE) {
         screen.render();
     }
 
+    function formatHitRate(rate) {
+        // Convert decimal to percentage with 2 decimal places
+        return (rate * 100).toFixed(2) + '%';
+    }
+
     // Calculate card dimensions
     const ROWS = 4;
     const COLS = 5;
@@ -545,8 +595,8 @@ if (RAW_MODE) {
             if (header.warning_flags & WARNING_FLAGS.NOT_SYNCED) warnings.push('NOT SYNCED');
             return warnings;
         }
-
-        update(header, rinfo, ranges, objectCounts) {
+        
+        update(header, rinfo, ranges, objectCounts, debugCounters) {
             const isFirstUpdate = !this.header;
             const hadWarnings = this.header ? this.getWarnings(this.header).length > 0 : false;
             
@@ -555,7 +605,8 @@ if (RAW_MODE) {
             this.rinfo = rinfo;
             this.ranges = ranges;
             this.objectCounts = objectCounts || [];
-            
+            this.debugCounters = debugCounters;
+   
             const currentWarnings = this.getWarnings(header);
             if (!isFirstUpdate && currentWarnings.length > hadWarnings) {
                 currentWarnings.forEach(warning => {
@@ -744,6 +795,64 @@ if (RAW_MODE) {
                 return row.join('');
             };
 
+            const debugCounters = this.debugCounters;
+
+            const debugCountersSection = debugCounters ? [
+                '',
+                'Debug Counters:',
+                `Database Size: ${formatBytes(debugCounters.dbKBTotal * 1024)}`,  // Convert KiB to bytes
+                `Ledger DB: ${formatBytes(debugCounters.dbKBLedger * 1024)}`,    // Convert KiB to bytes
+                `Transaction DB: ${formatBytes(debugCounters.dbKBTransaction * 1024)}`, // Convert KiB to bytes
+                `Local Transactions: ${debugCounters.localTxCount.toLocaleString()}`,
+                `Write Load: ${debugCounters.writeLoad}`,
+                `Historical Per Minute: ${debugCounters.historicalPerMinute}`,
+                '',
+                'Cache Statistics:',
+                `SLE Hit Rate: ${formatHitRate(debugCounters.sleHitRate / 1000)}`,      // Convert to percentage
+                `Ledger Hit Rate: ${formatHitRate(debugCounters.ledgerHitRate / 100000)}`, // Convert to percentage
+                `AL Size: ${debugCounters.alSize}`,
+                `AL Hit Rate: ${formatHitRate(debugCounters.alHitRate / 100000)}`,        // Convert to percentage
+                `Fullbelow Size: ${debugCounters.fullbelowSize.toLocaleString()}`,
+                `Treenode Cache Size: ${debugCounters.treenodeCacheSize.toLocaleString()}`,
+                `Treenode Track Size: ${debugCounters.treenodeTrackSize.toLocaleString()}`,
+                '',
+                'Node Statistics:',
+                `Node Reads Total: ${debugCounters.nodeFetchCount.toLocaleString()}`,
+                `Node Read Hits: ${debugCounters.nodeFetchHitCount.toLocaleString()}`,
+                `Node Read Bytes: ${formatBytes(debugCounters.nodeFetchSize)}`,
+                `Node Writes: ${debugCounters.nodeWriteCount.toLocaleString()}`,
+                `Node Written Bytes: ${formatBytes(debugCounters.nodeWriteSize)}`,
+                '',
+                'Memory Objects:',
+                `STObject Count: ${debugCounters.ripple_STObject || 0}`,
+                `STArray Count: ${debugCounters.ripple_STArray || 0}`,
+                `STAmount Count: ${debugCounters.ripple_STAmount || 0}`,
+                `STLedgerEntry Count: ${debugCounters.ripple_STLedgerEntry || 0}`,
+                `STTx Count: ${debugCounters.ripple_STTx || 0}`,
+                `STValidation Count: ${debugCounters.ripple_STValidation || 0}`,
+                '',
+                'SHAMap Objects:',
+                `Account State Leaf Nodes: ${debugCounters.ripple_SHAMapAccountStateLeafNode || 0}`,
+                `Inner Nodes: ${debugCounters.ripple_SHAMapInnerNode || 0}`,
+                `Items: ${debugCounters.ripple_SHAMapItem || 0}`,
+                `Tx Leaf Nodes: ${debugCounters.ripple_SHAMapTxLeafNode || 0}`,
+                `Tx Plus Meta Leaf Nodes: ${debugCounters.ripple_SHAMapTxPlusMetaLeafNode || 0}`,
+                '',
+                'Other Objects:',
+                `Accepted Ledger: ${debugCounters.ripple_AcceptedLedger || 0}`,
+                `Accepted LedgerTx: ${debugCounters.ripple_AcceptedLedgerTx || 0}`,
+                `HashRouter Entries: ${debugCounters.ripple_HashRouter_Entry || 0}`,
+                `Inbound Ledger: ${debugCounters.ripple_InboundLedger || 0}`,
+                `Ledger: ${debugCounters.ripple_Ledger || 0}`,
+                `Transaction: ${debugCounters.ripple_Transaction || 0}`,
+                '',
+                'Thread Stats:',
+                `Read Queue Size: ${debugCounters.read_queue || 0}`,
+                `Read Request Bundle: ${debugCounters.read_request_bundle || 0}`,
+                `Read Threads Running: ${debugCounters.read_threads_running || 0}`,
+                `Read Threads Total: ${debugCounters.read_threads_total || 0}`
+            ].join('\n') : '\nDebug Counters: Not available';            
+
             const objectCountsSection = [
                 '',
                 'Object Counts:',
@@ -795,6 +904,7 @@ if (RAW_MODE) {
                     `${["Disconnect", "Connect", "Syncing", "Tracking", "Full"][i]}: ${count} transitions, Duration: ${formatDuration(Number(this.header.state_durations[i]))}`
                 ).join('\n'),
                 `Initial Sync Time: ${formatDuration(Number(this.header.initial_sync_us))}`,
+                debugCountersSection,
                 objectCountsSection
             ].join('\n');
 
@@ -836,6 +946,7 @@ if (RAW_MODE) {
             const header = parseServerInfoHeader(msg);
             const serverKey = header.node_public_key;
             const ranges = parseLedgerRanges(msg, header);
+            const debugCounters = parseDebugCounters(msg);
             const objectCounts = parseObjectCounts(msg, header);
         
             if (!servers.has(serverKey)) {
@@ -856,7 +967,7 @@ if (RAW_MODE) {
                 } catch (err) {
                     console.debug('Failed to parse ledger ranges:', err.message);
                 }
-                card.update(header, rinfo, ranges, objectCounts);
+                card.update(header, rinfo, ranges, objectCounts, debugCounters);
             }
         } catch (err) {
             console.debug('Error processing packet:', err.message);
