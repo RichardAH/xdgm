@@ -1,4 +1,4 @@
-# XRPL DataGram Monitor (XDGM)
+# XAHAU DataGram Monitor (XDGM)
 
 A terminal-based dashboard for monitoring Xahau (and XRPL if amended) server datagrams in real-time. This tool listens for UDP packets containing server information and displays them in an interactive terminal interface.
 
