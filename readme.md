@@ -1,10 +1,10 @@
 # XRPL DataGram Monitor (XDGM)
 
-A terminal-based dashboard for monitoring XRPL (XRP Ledger) server datagrams in real-time. This tool listens for UDP packets containing server information and displays them in an interactive terminal interface.
+A terminal-based dashboard for monitoring Xahau (and XRPL if amended) server datagrams in real-time. This tool listens for UDP packets containing server information and displays them in an interactive terminal interface.
 
 ## Features
 
-- Real-time monitoring of multiple XRPL servers
+- Real-time monitoring of multiple servers
 - Display of key metrics including:
   - Server status and synchronization state
   - Peer count and network ID
